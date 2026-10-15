@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дневник питания</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f5f7;
+    --surface2: #eeeef0;
+    --text: #1a1a1a;
+    --text2: #6e6e73;
+    --accent: #34c759;
+    --accent-dim: rgba(52,199,89,.12);
+    --red: #ff3b30;
+    --orange: #ff9500;
+    --blue: #007aff;
+    --border: rgba(0,0,0,.06);
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e;
+      --surface: #2c2c2e;
+      --surface2: #3a3a3c;
+      --text: #f2f2f7;
+      --text2: #98989e;
+      --border: rgba(255,255,255,.08);
+      --shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  /* ── Date nav ── */
+  .date-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0 16px;
+  }
+  .date-nav button {
+    background: var(--surface); border: none; color: var(--text);
+    width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    font-size: 18px; display: flex; align-items: center; justify-content: center;
+  }
+  .date-nav button:active { background: var(--surface2); }
+  .date-label { font-size: 15px; font-weight: 600; }
+
+  /* ── Summary ring ── */
+  .summary {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow);
+  }
+  .summary-row { display: flex; align-items: center; gap: 20px; }
+  .ring-wrap { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
+  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: var(--surface2); stroke-width: 7; }
+  .ring-fill { fill: none; stroke: var(--accent); stroke-width: 7;
+    stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+  .ring-text {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .ring-kcal { font-size: 22px; font-weight: 700; line-height: 1; }
+  .ring-label { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .macros { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .macro-row { display: flex; align-items: center; gap: 8px; }
+  .macro-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .macro-dot.p { background: var(--blue); }
+  .macro-dot.f { background: var(--orange); }
+  .macro-dot.c { background: var(--accent); }
+  .macro-name { font-size: 13px; color: var(--text2); width: 52px; }
+  .macro-bar-bg {
+    flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden;
+  }
+  .macro-bar { height: 100%; border-radius: 3px; transition: width .4s ease; }
+  .macro-bar.p { background: var(--blue); }
+  .macro-bar.f { background: var(--orange); }
+  .macro-bar.c { background: var(--accent); }
+  .macro-val { font-size: 13px; font-weight: 600; width: 44px; text-align: right; }
+
+  /* ── Meal sections ── */
+  .meal-section { margin-bottom: 12px; }
+  .meal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow); cursor: pointer; user-select: none;
+  }
+  .meal-header:active { background: var(--surface2); }
+  .meal-left { display: flex; align-items: center; gap: 10px; }
+  .meal-icon { font-size: 22px; }
+  .meal-title { font-size: 15px; font-weight: 600; }
+  .meal-kcal { font-size: 14px; color: var(--text2); font-weight: 500; }
+  .meal-items {
+    padding: 4px 0 0 0; overflow: hidden;
+    max-height: 0; transition: max-height .3s ease;
+  }
+  .meal-items.open { max-height: 2000px; }
+  .item-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; margin: 4px 0; background: var(--surface);
+    border-radius: 10px;
+  }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 14px; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .item-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .item-kcal { font-size: 14px; font-weight: 600; margin-left: 12px; white-space: nowrap; }
+  .item-del {
+    background: none; border: none; color: var(--red); font-size: 18px;
+    margin-left: 8px; cursor: pointer; padding: 4px;
+  }
+
+  .add-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 10px; margin-top: 4px; border: 1.5px dashed var(--border);
+    border-radius: 10px; background: transparent; color: var(--text2);
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  }
+  .add-btn:active { background: var(--surface); }
+
+  /* ── Modal ── */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    display: none; align-items: flex-end; justify-content: center; z-index: 100;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--bg); width: 100%; max-width: 480px;
+    border-radius: 20px 20px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0));
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+  .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .modal label { display: block; font-size: 13px; font-weight: 500;
+    color: var(--text2); margin-bottom: 4px; margin-top: 12px; }
+  .modal input, .modal select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+    border-radius: 10px; font-size: 15px; background: var(--surface);
+    color: var(--text); font-family: inherit; outline: none;
+  }
+  .modal input:focus, .modal select:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions button {
+    flex: 1; padding: 12px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .btn-cancel { background: var(--surface); color: var(--text); }
+  .btn-save { background: var(--accent); color: #fff; }
+  .btn-save:active { opacity: .85; }
+
+  /* ── Goal setting ── */
+  .goal-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+  }
+  .goal-row span { font-size: 13px; color: var(--text2); }
+  .goal-edit {
+    background: none; border: none; color: var(--blue); font-size: 13px;
+    font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Date nav -->
+  <div class="date-nav">
+    <button id="prevDay">‹</button>
+    <span class="date-label" id="dateLabel"></span>
+    <button id="nextDay">›</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="summary-row">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle class="ring-bg" cx="50" cy="50" r="42"/>
+          <circle class="ring-fill" id="ring" cx="50" cy="50" r="42"
+            stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-kcal" id="totalKcal">0</span>
+          <span class="ring-label">ккал</span>
+        </div>
+      </div>
+      <div class="macros">
+        <div class="macro-row">
+          <div class="macro-dot p"></div>
+          <span class="macro-name">Белки</span>
+          <div class="macro-bar-bg"><div class="macro-bar p" id="barP" style="width:0%"></div></div>
+          <span class="macro-val" id="valP">0 г</span>
+        </div>
+        <div class="macro-row">
+          <div class="macro-dot f"></div>
+          <span class="macro-name">Жиры</span>
+          <div class="macro-bar-bg"><div class="macro-bar f" id="barF" style="width:0%"></div></div>
+          <span class="macro-val" id="valF">0 г</span>
+        </div>
+        <div class="macro-row">
+          <div class="macro-dot c"></div>
+          <span class="macro-name">Углеводы</span>
+          <div class="macro-bar-bg"><div class="macro-bar c" id="barC" style="width:0%"></div></div>
+          <span class="macro-val" id="valC">0 г</span>
+        </div>
+      </div>
+    </div>
+    <div class="goal-row" style="margin-top:12px">
+      <span>Цель: <strong id="goalDisplay">2000</strong> ккал</span>
+      <button class="goal-edit" id="goalBtn">Изменить</button>
+    </div>
+  </div>
+
+  <!-- Meals -->
+  <div id="mealsContainer"></div>
+</div>
+
+<!-- Add item modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modalTitle">Добавить</h3>
+    <label>Название</label>
+    <input type="text" id="inpName" placeholder="Куриная грудка">
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><label>Вес, г</label><input type="number" id="inpWeight" placeholder="150"></div>
+      <div style="flex:1"><label>Ккал</label><input type="number" id="inpKcal" placeholder="230"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><label>Белки, г</label><input type="number" id="inpP" placeholder="30"></div>
+      <div style="flex:1"><label>Жиры, г</label><input type="number" id="inpF" placeholder="5"></div>
+      <div style="flex:1"><label>Углеводы, г</label><input type="number" id="inpC" placeholder="0"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancel">Отмена</button>
+      <button class="btn-save" id="btnSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Goal modal -->
+<div class="overlay" id="goalOverlay">
+  <div class="modal">
+    <h3>Дневная цель</h3>
+    <label>Калории, ккал</label>
+    <input type="number" id="inpGoal" placeholder="2000">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="goalCancel">Отмена</button>
+      <button class="btn-save" id="goalSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MEALS = [
+  { key: 'breakfast', icon: '🌅', title: 'Завтрак' },
+  { key: 'lunch',     icon: '☀️', title: 'Обед' },
+  { key: 'snack',     icon: '🍎', title: 'Полдник' },
+  { key: 'dinner',    icon: '🌙', title: 'Ужин' },
+];
+
+let currentDate = todayStr();
+let openMeal = null;
+let activeMealKey = null;
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dayKey(date) { return `meals_${date}`; }
+
+function loadDay(date) {
+  try { return JSON.parse(localStorage.getItem(dayKey(date))) || {}; } catch { return {}; }
+}
+function saveDay(date, data) {
+  localStorage.setItem(dayKey(date), JSON.stringify(data));
+}
+function getGoal() { return parseInt(localStorage.getItem('kcal_goal')) || 2000; }
+function setGoal(v) { localStorage.setItem('kcal_goal', String(v)); }
+
+function formatDate(str) {
+  const d = new Date(str + 'T12:00:00');
+  const today = todayStr();
+  const yest = new Date(); yest.setDate(yest.getDate()-1);
+  const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth()+1).padStart(2,'0')}-${String(yest.getDate()).padStart(2,'0')}`;
+  if (str === today) return 'Сегодня';
+  if (str === yesterdayStr) return 'Вчера';
+  return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long', weekday:'short' });
+}
+
+function shiftDate(str, delta) {
+  const d = new Date(str + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function render() {
+  const data = loadDay(currentDate);
+  const goal = getGoal();
+  document.getElementById('dateLabel').textContent = formatDate(currentDate);
+  document.getElementById('goalDisplay').textContent = goal;
+
+  let totalK=0, totalP=0, totalF=0, totalC=0;
+  MEALS.forEach(m => {
+    (data[m.key]||[]).forEach(it => {
+      totalK += it.kcal||0; totalP += it.p||0; totalF += it.f||0; totalC += it.c||0;
+    });
+  });
+
+  document.getElementById('totalKcal').textContent = Math.round(totalK);
+  const pct = Math.min(totalK / goal, 1);
+  const circ = 263.9;
+  document.getElementById('ring').style.strokeDashoffset = circ - circ * pct;
+  if (pct >= 1) document.getElementById('ring').style.stroke = 'var(--red)';
+  else document.getElementById('ring').style.stroke = 'var(--accent)';
+
+  const maxP = goal * 0.3 / 4, maxF = goal * 0.3 / 9, maxC = goal * 0.5 / 4;
+  document.getElementById('barP').style.width = Math.min(totalP/maxP*100,100)+'%';
+  document.getElementById('barF').style.width = Math.min(totalF/maxF*100,100)+'%';
+  document.getElementById('barC').style.width = Math.min(totalC/maxC*100,100)+'%';
+  document.getElementById('valP').textContent = Math.round(totalP)+' г';
+  document.getElementById('valF').textContent = Math.round(totalF)+' г';
+  document.getElementById('valC').textContent = Math.round(totalC)+' г';
+
+  const container = document.getElementById('mealsContainer');
+  container.innerHTML = '';
+  MEALS.forEach(m => {
+    const items = data[m.key] || [];
+    const mealK = items.reduce((s,i) => s+(i.kcal||0), 0);
+    const sec = document.createElement('div');
+    sec.className = 'meal-section';
+    sec.innerHTML = `
+      <div class="meal-header" data-meal="${m.key}">
+        <div class="meal-left">
+          <span class="meal-icon">${m.icon}</span>
+          <span class="meal-title">${m.title}</span>
+        </div>
+        <span class="meal-kcal">${Math.round(mealK)} ккал</span>
+      </div>
+      <div class="meal-items ${openMeal===m.key?'open':''}" id="items_${m.key}">
+        ${items.map((it,i) => `
+          <div class="item-row">
+            <div class="item-info">
+              <div class="item-name">${esc(it.name)}</div>
+              <div class="item-meta">${it.weight?it.weight+' г · ':''}Б ${Math.round(it.p||0)} · Ж ${Math.round(it.f||0)} · У ${Math.round(it.c||0)}</div>
+            </div>
+            <span class="item-kcal">${Math.round(it.kcal||0)} ккал</span>
+            <button class="item-del" data-meal="${m.key}" data-idx="${i}">✕</button>
+          </div>
+        `).join('')}
+        <button class="add-btn" data-meal="${m.key}">+ Добавить</button>
+      </div>
+    `;
+    container.appendChild(sec);
+  });
+
+  container.querySelectorAll('.meal-header').forEach(h => {
+    h.addEventListener('click', () => {
+      const k = h.dataset.meal;
+      openMeal = openMeal === k ? null : k;
+      render();
+    });
+  });
+  container.querySelectorAll('.add-btn').forEach(b => {
+    b.addEventListener('click', () => openModal(b.dataset.meal));
+  });
+  container.querySelectorAll('.item-del').forEach(b => {
+    b.addEventListener('click', () => deleteItem(b.dataset.meal, parseInt(b.dataset.idx)));
+  });
+}
+
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function deleteItem(meal, idx) {
+  const data = loadDay(currentDate);
+  if (data[meal]) { data[meal].splice(idx, 1); saveDay(currentDate, data); }
+  render();
+}
+
+function openModal(mealKey) {
+  activeMealKey = mealKey;
+  const m = MEALS.find(x=>x.key===mealKey);
+  document.getElementById('modalTitle').textContent = m.title;
+  ['inpName','inpWeight','inpKcal','inpP','inpF','inpC'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('overlay').classList.add('show');
+}
+
+document.getElementById('btnCancel').onclick = () => document.getElementById('overlay').classList.remove('show');
+document.getElementById('btnSave').onclick = () => {
+  const name = document.getElementById('inpName').value.trim();
+  if (!name) return;
+  const item = {
+    name,
+    weight: parseFloat(document.getElementById('inpWeight').value)||0,
+    kcal: parseFloat(document.getElementById('inpKcal').value)||0,
+    p: parseFloat(document.getElementById('inpP').value)||0,
+    f: parseFloat(document.getElementById('inpF').value)||0,
+    c: parseFloat(document.getElementById('inpC').value)||0,
+  };
+  const data = loadDay(currentDate);
+  if (!data[activeMealKey]) data[activeMealKey] = [];
+  data[activeMealKey].push(item);
+  saveDay(currentDate, data);
+  document.getElementById('overlay').classList.remove('show');
+  openMeal = activeMealKey;
+  render();
+};
+
+document.getElementById('goalBtn').onclick = () => {
+  document.getElementById('inpGoal').value = getGoal();
+  document.getElementById('goalOverlay').classList.add('show');
+};
+document.getElementById('goalCancel').onclick = () => document.getElementById('goalOverlay').classList.remove('show');
+document.getElementById('goalSave').onclick = () => {
+  const v = parseInt(document.getElementById('inpGoal').value);
+  if (v > 0) setGoal(v);
+  document.getElementById('goalOverlay').classList.remove('show');
+  render();
+};
+
+document.getElementById('prevDay').onclick = () => { currentDate = shiftDate(currentDate, -1); render(); };
+document.getElementById('nextDay').onclick = () => { currentDate = shiftDate(currentDate, +1); render(); };
+
+// Telegram theme
+if (window.Telegram?.WebApp) {
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+  const p = tg.themeParams;
+  if (p.bg_color) document.documentElement.style.setProperty('--bg', p.bg_color);
+  if (p.secondary_bg_color) document.documentElement.style.setProperty('--surface', p.secondary_bg_color);
+  if (p.text_color) document.documentElement.style.setProperty('--text', p.text_color);
+  if (p.hint_color) document.documentElement.style.setProperty('--text2', p.hint_color);
+  if (p.button_color) document.documentElement.style.setProperty('--accent', p.button_color);
+}
+
+render();
+</script>
+</body>
+</html>
