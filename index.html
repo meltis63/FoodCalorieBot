@@ -41,7 +41,9 @@
     font-size: 18px; display: flex; align-items: center; justify-content: center;
   }
   .date-nav button:active { background: var(--surface2); }
-  .date-label { font-size: 15px; font-weight: 600; }
+  .date-label { font-size: 15px; font-weight: 600; cursor: pointer;
+    padding: 4px 12px; border-radius: 8px; transition: background .15s; }
+  .date-label:active { background: var(--surface2); }
 
   .summary {
     background: var(--surface); border-radius: var(--radius);
@@ -126,6 +128,30 @@
   .goal-edit { background: none; border: none; color: var(--blue); font-size: 13px;
     font-weight: 600; cursor: pointer; font-family: inherit; }
   .sync-status { font-size: 11px; color: var(--text2); text-align: center; padding: 4px 0; }
+
+  /* Calendar */
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-header button { background: var(--surface); border: none; color: var(--text);
+    width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; }
+  .cal-header button:active { background: var(--surface2); }
+  .cal-month { font-size: 15px; font-weight: 600; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+  .cal-dow { font-size: 11px; color: var(--text2); padding: 4px 0; font-weight: 500; }
+  .cal-day {
+    font-size: 13px; padding: 8px 0; border-radius: 8px; cursor: pointer;
+    border: none; background: transparent; color: var(--text); font-family: inherit;
+  }
+  .cal-day:active { background: var(--surface2); }
+  .cal-day.today { font-weight: 700; color: var(--accent); }
+  .cal-day.selected { background: var(--accent); color: #fff; font-weight: 600; }
+  .cal-day.disabled { color: var(--surface2); pointer-events: none; }
+  .cal-day.has-data { position: relative; }
+  .cal-day.has-data::after {
+    content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+    width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+  }
+  .cal-day.selected.has-data::after { background: #fff; }
 </style>
 </head>
 <body>
@@ -214,9 +240,25 @@
   </div>
 </div>
 
+<!-- Calendar modal -->
+<div class="overlay" id="calOverlay">
+  <div class="modal">
+    <div class="cal-header">
+      <button id="calPrev">‹</button>
+      <span class="cal-month" id="calMonth"></span>
+      <button id="calNext">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-cancel" id="calToday" style="flex:none;padding:10px 20px">Сегодня</button>
+      <button class="btn-cancel" id="calClose">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
+import { getFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyABb-lepQ-9GhHPxWRCimaWvSzP857mfw8",
@@ -242,6 +284,7 @@ let openMeal = null;
 let activeMealKey = null;
 let userId = null;
 let cache = {};
+let earliestDate = null;
 
 function todayStr() {
   const d = new Date();
@@ -266,6 +309,8 @@ async function saveDay(date, data) {
   cache[date] = data;
   try {
     await setDoc(doc(db, 'users', userId, 'days', date), data);
+    daysWithData.add(date);
+    if (!earliestDate || date < earliestDate) earliestDate = date;
     showSync('Сохранено ✓');
   } catch (e) {
     console.error('Save error:', e);
@@ -315,6 +360,7 @@ async function render() {
   const goal = await getGoal();
   document.getElementById('dateLabel').textContent = formatDate(currentDate);
   document.getElementById('goalDisplay').textContent = goal;
+  updateNavButtons();
 
   let tK=0, tP=0, tF=0, tC=0;
   MEALS.forEach(m => {
@@ -423,8 +469,120 @@ document.getElementById('goalSave').onclick = async () => {
   render();
 };
 
-document.getElementById('prevDay').onclick = () => { currentDate = shiftDate(currentDate,-1); render(); };
-document.getElementById('nextDay').onclick = () => { currentDate = shiftDate(currentDate,+1); render(); };
+let daysWithData = new Set();
+
+function maxDateStr() {
+  return shiftDate(todayStr(), 7);
+}
+
+async function loadEarliestDate() {
+  try {
+    const daysRef = collection(db, 'users', userId, 'days');
+    const snap = await getDocs(daysRef);
+    snap.forEach(d => daysWithData.add(d.id));
+    const sorted = [...daysWithData].sort();
+    earliestDate = sorted.length ? sorted[0] : todayStr();
+  } catch (e) {
+    console.error('Earliest date error:', e);
+    earliestDate = todayStr();
+  }
+}
+
+function updateNavButtons() {
+  const prevBtn = document.getElementById('prevDay');
+  const nextBtn = document.getElementById('nextDay');
+  prevBtn.disabled = earliestDate && currentDate <= earliestDate;
+  prevBtn.style.opacity = prevBtn.disabled ? '0.3' : '1';
+  nextBtn.disabled = currentDate >= maxDateStr();
+  nextBtn.style.opacity = nextBtn.disabled ? '0.3' : '1';
+}
+
+document.getElementById('prevDay').onclick = () => {
+  if (earliestDate && currentDate <= earliestDate) return;
+  currentDate = shiftDate(currentDate, -1);
+  render();
+};
+document.getElementById('nextDay').onclick = () => {
+  if (currentDate >= maxDateStr()) return;
+  currentDate = shiftDate(currentDate, +1);
+  render();
+};
+
+// ── Calendar ──
+let calYear, calMonth;
+
+function openCalendar() {
+  const d = new Date(currentDate + 'T12:00:00');
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  renderCalendar();
+  document.getElementById('calOverlay').classList.add('show');
+}
+
+function renderCalendar() {
+  const months = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+    'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  document.getElementById('calMonth').textContent = `${months[calMonth]} ${calYear}`;
+
+  const grid = document.getElementById('calGrid');
+  const dows = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  let html = dows.map(d => `<span class="cal-dow">${d}</span>`).join('');
+
+  const first = new Date(calYear, calMonth, 1);
+  let startDow = first.getDay() - 1;
+  if (startDow < 0) startDow = 6;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = todayStr();
+  const max = maxDateStr();
+
+  for (let i = 0; i < startDow; i++) html += '<span></span>';
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = ds === today;
+    const isSelected = ds === currentDate;
+    const isBefore = earliestDate && ds < earliestDate;
+    const isAfter = ds > max;
+    const hasData = daysWithData.has(ds);
+
+    let cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (isSelected) cls += ' selected';
+    if (isBefore || isAfter) cls += ' disabled';
+    if (hasData) cls += ' has-data';
+
+    html += `<button class="${cls}" data-date="${ds}">${day}</button>`;
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.cal-day:not(.disabled)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentDate = btn.dataset.date;
+      document.getElementById('calOverlay').classList.remove('show');
+      render();
+    });
+  });
+}
+
+document.getElementById('dateLabel').onclick = openCalendar;
+document.getElementById('calPrev').onclick = () => {
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+};
+document.getElementById('calNext').onclick = () => {
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+};
+document.getElementById('calToday').onclick = () => {
+  currentDate = todayStr();
+  document.getElementById('calOverlay').classList.remove('show');
+  render();
+};
+document.getElementById('calClose').onclick = () => {
+  document.getElementById('calOverlay').classList.remove('show');
+};
 
 // ── Init ──
 async function init() {
@@ -445,6 +603,7 @@ async function init() {
     userId = 'anonymous';
   }
 
+  await loadEarliestDate();
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('appContent').style.display = 'block';
   await render();
