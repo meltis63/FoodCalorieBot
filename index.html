@@ -259,18 +259,24 @@
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js';
 import { getFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js';
 
+// ═══════════════════════════════════════════
+// ▼▼▼  ВСТАВЬТЕ СВОИ ДАННЫЕ FIREBASE СЮДА  ▼▼▼
 const firebaseConfig = {
-  apiKey: "AIzaSyABb-lepQ-9GhHPxWRCimaWvSzP857mfw8",
-  authDomain: "foodcaloriebot.firebaseapp.com",
-  projectId: "foodcaloriebot",
-  storageBucket: "foodcaloriebot.firebasestorage.app",
-  messagingSenderId: "908304594252",
-  appId: "1:908304594252:web:09fb9c2aceb567b5618be9"
+  apiKey: "ВСТАВЬТЕ_СЮДА",
+  authDomain: "ВСТАВЬТЕ_СЮДА.firebaseapp.com",
+  projectId: "ВСТАВЬТЕ_СЮДА",
+  storageBucket: "ВСТАВЬТЕ_СЮДА.appspot.com",
+  messagingSenderId: "ВСТАВЬТЕ_СЮДА",
+  appId: "ВСТАВЬТЕ_СЮДА"
 };
+// ▲▲▲  ВСТАВЬТЕ СВОИ ДАННЫЕ FIREBASE СЮДА  ▲▲▲
+// ═══════════════════════════════════════════
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 const MEALS = [
   { key: 'breakfast', icon: '🌅', title: 'Завтрак' },
@@ -586,7 +592,7 @@ document.getElementById('calClose').onclick = () => {
 
 // ── Init ──
 async function init() {
-  // Get Telegram user ID
+  // Telegram theme
   if (window.Telegram?.WebApp) {
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -601,6 +607,28 @@ async function init() {
     userId = String(tg.initDataUnsafe?.user?.id || 'anonymous');
   } else {
     userId = 'anonymous';
+  }
+
+  // Firebase Anonymous Auth
+  try {
+    await signInAnonymously(auth);
+    await new Promise((resolve) => {
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          // Create mapping: Firebase UID → Telegram ID
+          try {
+            await setDoc(doc(db, 'auth_map', user.uid), {
+              telegramId: userId
+            }, { merge: true });
+          } catch (e) {
+            console.error('Auth map error:', e);
+          }
+        }
+        resolve();
+      });
+    });
+  } catch (e) {
+    console.error('Auth error:', e);
   }
 
   await loadEarliestDate();
