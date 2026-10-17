@@ -482,29 +482,38 @@ function maxDateStr() {
 }
 
 async function loadEarliestDate() {
-  try {
-    const daysRef = collection(db, 'users', userId, 'days');
-    const snap = await getDocs(daysRef);
-    snap.forEach(d => daysWithData.add(d.id));
-    const sorted = [...daysWithData].sort();
-    earliestDate = sorted.length ? sorted[0] : todayStr();
-  } catch (e) {
-    console.error('Earliest date error:', e);
-    earliestDate = todayStr();
+  // Retry a few times — auth may still be initializing
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const daysRef = collection(db, 'users', userId, 'days');
+      const snap = await getDocs(daysRef);
+      snap.forEach(d => daysWithData.add(d.id));
+      break;
+    } catch (e) {
+      console.warn('loadEarliestDate attempt', attempt + 1, e);
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
+  const sorted = [...daysWithData].sort();
+  earliestDate = sorted.length ? sorted[0] : null;
+}
+
+function minDateStr() {
+  // If we have data, limit to earliest record; otherwise allow 90 days back
+  return earliestDate || shiftDate(todayStr(), -90);
 }
 
 function updateNavButtons() {
   const prevBtn = document.getElementById('prevDay');
   const nextBtn = document.getElementById('nextDay');
-  prevBtn.disabled = earliestDate && currentDate <= earliestDate;
+  prevBtn.disabled = currentDate <= minDateStr();
   prevBtn.style.opacity = prevBtn.disabled ? '0.3' : '1';
   nextBtn.disabled = currentDate >= maxDateStr();
   nextBtn.style.opacity = nextBtn.disabled ? '0.3' : '1';
 }
 
 document.getElementById('prevDay').onclick = () => {
-  if (earliestDate && currentDate <= earliestDate) return;
+  if (currentDate <= minDateStr()) return;
   currentDate = shiftDate(currentDate, -1);
   render();
 };
@@ -547,7 +556,7 @@ function renderCalendar() {
     const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const isToday = ds === today;
     const isSelected = ds === currentDate;
-    const isBefore = earliestDate && ds < earliestDate;
+    const isBefore = ds < minDateStr();
     const isAfter = ds > max;
     const hasData = daysWithData.has(ds);
 
