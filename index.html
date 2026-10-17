@@ -155,11 +155,10 @@
 
   /* Settings */
   .settings-btn {
-    position: fixed; top: env(safe-area-inset-top, 8px); right: 12px;
-    width: 36px; height: 36px; border-radius: 50%; border: none;
-    background: var(--surface); color: var(--text2); font-size: 18px;
+    width: 32px; height: 32px; border-radius: 50%; border: none;
+    background: var(--surface); color: var(--text2); font-size: 16px;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    box-shadow: var(--shadow); z-index: 50; margin-top: 8px;
+    flex-shrink: 0;
   }
   .settings-btn:active { background: var(--surface2); }
 
@@ -221,6 +220,7 @@
       <button id="prevDay">‹</button>
       <span class="date-label" id="dateLabel"></span>
       <button id="nextDay">›</button>
+      <button class="settings-btn" id="settingsBtn">⚙</button>
     </div>
 
     <div class="summary">
@@ -293,9 +293,6 @@
     </div>
   </div>
 </div>
-
-<!-- Settings button -->
-<button class="settings-btn" id="settingsBtn">⚙</button>
 
 <!-- Settings modal -->
 <div class="overlay" id="settingsOverlay">
@@ -709,7 +706,7 @@ function applyTheme(theme) {
   r.setProperty('--text2', t.text2);
   r.setProperty('--accent', t.accent);
   r.setProperty('--surface-rgb', t.srgb);
-  document.body.style.background = t.bg;
+  document.body.style.backgroundColor = t.bg;
   currentTheme = theme;
 }
 
