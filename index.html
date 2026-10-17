@@ -152,6 +152,60 @@
     width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
   }
   .cal-day.selected.has-data::after { background: #fff; }
+
+  /* Settings */
+  .settings-btn {
+    position: fixed; top: env(safe-area-inset-top, 8px); right: 12px;
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    background: var(--surface); color: var(--text2); font-size: 18px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow); z-index: 50; margin-top: 8px;
+  }
+  .settings-btn:active { background: var(--surface2); }
+
+  .settings-section { margin-bottom: 20px; }
+  .settings-section h4 { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: var(--text2); }
+
+  .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .theme-swatch {
+    aspect-ratio: 1; border-radius: 12px; cursor: pointer; border: 3px solid transparent;
+    position: relative; transition: border-color .2s, transform .15s;
+  }
+  .theme-swatch:active { transform: scale(0.93); }
+  .theme-swatch.active { border-color: var(--accent); }
+  .theme-swatch .check {
+    position: absolute; bottom: 4px; right: 4px; width: 18px; height: 18px;
+    background: var(--accent); border-radius: 50%; color: #fff; font-size: 11px;
+    display: none; align-items: center; justify-content: center;
+  }
+  .theme-swatch.active .check { display: flex; }
+
+  .bg-options { display: flex; flex-direction: column; gap: 10px; }
+  .bg-upload-area {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 16px;
+    text-align: center; cursor: pointer; color: var(--text2); font-size: 13px;
+    transition: border-color .2s;
+  }
+  .bg-upload-area:active { border-color: var(--accent); }
+  .bg-preview {
+    width: 100%; height: 80px; border-radius: 10px; object-fit: cover;
+    margin-top: 8px; display: none;
+  }
+  .bg-preview.show { display: block; }
+  .bg-remove {
+    background: var(--red); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+    display: none; margin-top: 8px; font-family: inherit;
+  }
+  .bg-remove.show { display: inline-block; }
+
+  /* Background image on body */
+  body.has-bg { background-size: cover; background-position: center; background-attachment: fixed; }
+  body.has-bg .container { background: rgba(0,0,0,0.35); min-height: 100vh;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+  body.has-bg .summary, body.has-bg .meal-header, body.has-bg .item-row,
+  body.has-bg .meal-items .add-btn { background: rgba(var(--surface-rgb, 44,44,46), 0.75); }
+  body.has-bg .date-nav button { background: rgba(var(--surface-rgb, 44,44,46), 0.75); }
 </style>
 </head>
 <body>
@@ -236,6 +290,37 @@
     <div class="modal-actions">
       <button class="btn-cancel" id="goalCancel">Отмена</button>
       <button class="btn-save" id="goalSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings button -->
+<button class="settings-btn" id="settingsBtn">⚙</button>
+
+<!-- Settings modal -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal" style="max-height:85vh;overflow-y:auto">
+    <h3>Настройки</h3>
+
+    <div class="settings-section">
+      <h4>🎨 Тема</h4>
+      <div class="theme-grid" id="themeGrid"></div>
+    </div>
+
+    <div class="settings-section">
+      <h4>🖼 Фон</h4>
+      <div class="bg-options">
+        <div class="bg-upload-area" id="bgUploadArea">
+          📷 Нажмите, чтобы загрузить фото
+          <input type="file" accept="image/*" id="bgFileInput" style="display:none">
+        </div>
+        <img class="bg-preview" id="bgPreview">
+        <button class="bg-remove" id="bgRemove">Удалить фон</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-save" id="settingsClose" style="flex:1">Готово</button>
     </div>
   </div>
 </div>
@@ -599,6 +684,133 @@ document.getElementById('calClose').onclick = () => {
   document.getElementById('calOverlay').classList.remove('show');
 };
 
+// ── Themes ──
+const THEMES = [
+  { id: 'green',  name: 'Зелёный',   bg: '#1c1c1e', surface: '#2c2c2e', surface2: '#3a3a3c', text: '#f2f2f7', text2: '#98989e', accent: '#34c759', srgb: '44,44,46' },
+  { id: 'blue',   name: 'Синий',     bg: '#0f1724', surface: '#1a2538', surface2: '#24334d', text: '#e8edf5', text2: '#7b8da6', accent: '#007aff', srgb: '26,37,56' },
+  { id: 'purple', name: 'Фиолетовый', bg: '#1a1525', surface: '#2a2238', surface2: '#3a304d', text: '#f0ecf7', text2: '#9688a8', accent: '#af52de', srgb: '42,34,56' },
+  { id: 'red',    name: 'Красный',   bg: '#1e1416', surface: '#2e2224', surface2: '#3e3032', text: '#f5eeef', text2: '#a6898c', accent: '#ff453a', srgb: '46,34,36' },
+  { id: 'orange', name: 'Оранжевый', bg: '#1e1a14', surface: '#2e2822', surface2: '#3e3830', text: '#f5f0ea', text2: '#a69882', accent: '#ff9500', srgb: '46,40,34' },
+  { id: 'pink',   name: 'Розовый',   bg: '#1e1419', surface: '#2e2228', surface2: '#3e3038', text: '#f5eef1', text2: '#a6899a', accent: '#ff2d55', srgb: '46,34,40' },
+  { id: 'light',  name: 'Светлая',   bg: '#ffffff', surface: '#f5f5f7', surface2: '#eeeef0', text: '#1a1a1a', text2: '#6e6e73', accent: '#34c759', srgb: '245,245,247' },
+  { id: 'sand',   name: 'Песочная',  bg: '#faf6f0', surface: '#f0ebe3', surface2: '#e5dfd6', text: '#2c2418', text2: '#8a7e6e', accent: '#c49a3c', srgb: '240,235,227' },
+];
+
+let currentTheme = 'green';
+let currentBg = null;
+
+function applyTheme(theme) {
+  const t = THEMES.find(x => x.id === theme) || THEMES[0];
+  const r = document.documentElement.style;
+  r.setProperty('--bg', t.bg);
+  r.setProperty('--surface', t.surface);
+  r.setProperty('--surface2', t.surface2);
+  r.setProperty('--text', t.text);
+  r.setProperty('--text2', t.text2);
+  r.setProperty('--accent', t.accent);
+  r.setProperty('--surface-rgb', t.srgb);
+  document.body.style.background = t.bg;
+  currentTheme = theme;
+}
+
+function applyBg(dataUrl) {
+  if (dataUrl) {
+    document.body.style.backgroundImage = `url(${dataUrl})`;
+    document.body.classList.add('has-bg');
+    document.getElementById('bgPreview').src = dataUrl;
+    document.getElementById('bgPreview').classList.add('show');
+    document.getElementById('bgRemove').classList.add('show');
+  } else {
+    document.body.style.backgroundImage = '';
+    document.body.classList.remove('has-bg');
+    document.getElementById('bgPreview').classList.remove('show');
+    document.getElementById('bgRemove').classList.remove('show');
+  }
+  currentBg = dataUrl;
+}
+
+function renderThemeGrid() {
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = THEMES.map(t => `
+    <div class="theme-swatch ${currentTheme === t.id ? 'active' : ''}"
+         data-theme="${t.id}"
+         style="background: linear-gradient(135deg, ${t.bg} 40%, ${t.accent});"
+         title="${t.name}">
+      <span class="check">✓</span>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.theme-swatch').forEach(s => {
+    s.addEventListener('click', async () => {
+      applyTheme(s.dataset.theme);
+      renderThemeGrid();
+      await saveSettings();
+    });
+  });
+}
+
+async function saveSettings() {
+  try {
+    await setDoc(doc(db, 'users', userId), {
+      theme: currentTheme,
+      bg: currentBg || null,
+    }, { merge: true });
+  } catch (e) { console.error('Settings save error:', e); }
+}
+
+async function loadSettings() {
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    if (snap.exists()) {
+      const d = snap.data();
+      if (d.theme) { currentTheme = d.theme; applyTheme(d.theme); }
+      if (d.bg) applyBg(d.bg);
+    }
+  } catch (e) { console.error('Settings load error:', e); }
+}
+
+function resizeImage(file, maxW, maxH) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = h * maxW / w; w = maxW; }
+        if (h > maxH) { w = w * maxH / h; h = maxH; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Settings UI
+document.getElementById('settingsBtn').onclick = () => {
+  renderThemeGrid();
+  document.getElementById('settingsOverlay').classList.add('show');
+};
+document.getElementById('settingsClose').onclick = () => {
+  document.getElementById('settingsOverlay').classList.remove('show');
+};
+document.getElementById('bgUploadArea').onclick = () => {
+  document.getElementById('bgFileInput').click();
+};
+document.getElementById('bgFileInput').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const dataUrl = await resizeImage(file, 800, 800);
+  applyBg(dataUrl);
+  await saveSettings();
+};
+document.getElementById('bgRemove').onclick = async () => {
+  applyBg(null);
+  await saveSettings();
+};
+
 // ── Init ──
 async function init() {
   // Telegram theme
@@ -606,13 +818,6 @@ async function init() {
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
-    const p = tg.themeParams;
-    if (p.bg_color) document.documentElement.style.setProperty('--bg', p.bg_color);
-    if (p.secondary_bg_color) document.documentElement.style.setProperty('--surface', p.secondary_bg_color);
-    if (p.text_color) document.documentElement.style.setProperty('--text', p.text_color);
-    if (p.hint_color) document.documentElement.style.setProperty('--text2', p.hint_color);
-    if (p.button_color) document.documentElement.style.setProperty('--accent', p.button_color);
-
     userId = String(tg.initDataUnsafe?.user?.id || 'anonymous');
   } else {
     userId = 'anonymous';
@@ -640,6 +845,7 @@ async function init() {
     console.error('Auth error:', e);
   }
 
+  await loadSettings();
   await loadEarliestDate();
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('appContent').style.display = 'block';
